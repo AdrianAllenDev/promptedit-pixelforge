@@ -2,6 +2,14 @@
 
 A Laravel, Vue and Inertia workspace for generating images and tracking usage in USD. Start with PHP 8.4, Composer, Node 22+, and PostgreSQL 16. The session authentication controllers come from the [official Vue starter kit](https://github.com/laravel/vue-starter-kit/tree/v1.0.2).
 
+## Reviewing the deployment
+
+Sign in with the privately supplied reviewer login to see the existing examples in Recent activity. The estimates and final charges remain visible when the image links expire. [Open the deployed workspace](https://pixelforge-225785740405.europe-west1.run.app/dashboard)
+
+The initial production check on November 26, 2026 recorded charges of $0.065881250 for a square image, $0 for a forced failure and $0.364087500 for a landscape image with duplicate delivery. Eight signed HTTP deliveries produced six distinct event receipts and three final bills. For November 25–26 UTC, the deployed key reported $0.343975000 in provider cost, matching the local bills exactly. Total customer spend was $0.429968750 and profit was $0.085993750.
+
+## Local setup
+
 1. Create separate PostgreSQL databases named `pixelforge` and `pixelforge_test`. Give the application user access to both.
 2. Copy `.env.example` to `.env`. Set the local database host, port, username and password.
 3. Run `composer install`, `npm ci`, `php artisan key:generate`, and `php artisan migrate`.
