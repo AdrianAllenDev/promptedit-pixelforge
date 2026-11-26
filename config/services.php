@@ -14,6 +14,11 @@ return [
     |
     */
 
+    'pixelforge' => [
+        'key' => env('PIXELFORGE_API_KEY'),
+        'secret' => env('PIXELFORGE_WEBHOOK_SECRET'),
+    ],
+
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),
     ],
