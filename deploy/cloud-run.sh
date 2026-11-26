@@ -9,7 +9,14 @@ image="$REGION-docker.pkg.dev/$PROJECT_ID/pixelforge/app:$(git rev-parse --short
 settings="APP_NAME=Pixelforge,APP_ENV=production,APP_DEBUG=false,DB_CONNECTION=pgsql,DB_HOST=/cloudsql/$INSTANCE_CONNECTION_NAME,DB_DATABASE=pixelforge,DB_USERNAME=pixelforge,SESSION_SECURE_COOKIE=true,LOG_CHANNEL=stderr"
 secrets="APP_KEY=pixelforge-app-key:latest,DB_PASSWORD=pixelforge-db-password:latest,PIXELFORGE_API_KEY=pixelforge-api-key:latest,PIXELFORGE_WEBHOOK_SECRET=pixelforge-webhook-secret:latest"
 common=(--project "$PROJECT_ID" --region "$REGION" --image "$image" --service-account "$RUNTIME_ACCOUNT" --set-cloudsql-instances "$INSTANCE_CONNECTION_NAME" --set-secrets "$secrets" --set-env-vars "$settings")
-gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --tag "$image" .
+if [[ -n "${BUILD_ACCOUNT:-}" ]]; then
+    : "${BUILD_SOURCE_BUCKET:?Set the source staging bucket for the build account}"
+    gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --config deploy/cloudbuild.yaml \
+        --service-account "projects/$PROJECT_ID/serviceAccounts/$BUILD_ACCOUNT" \
+        --gcs-source-staging-dir "gs://$BUILD_SOURCE_BUCKET/source" --substitutions "_IMAGE=$image" .
+else
+    gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --tag "$image" .
+fi
 gcloud run jobs deploy pixelforge-migrate "${common[@]}" --command php --args artisan,migrate,--force --max-retries 0 --execute-now --wait
 gcloud run jobs deploy pixelforge-recover "${common[@]}" --command php --args artisan,pixelforge:recover --max-retries 1 --task-timeout 10m
 gcloud run deploy pixelforge "${common[@]}" --port 8080 --allow-unauthenticated --max-instances 3
