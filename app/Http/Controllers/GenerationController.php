@@ -25,7 +25,7 @@ class GenerationController extends Controller
             ->selectRaw("g.payload->>'prompt' as prompt")->simplePaginate(20);
         $active = Generation::where('user_id', $request->user()->id)->whereNotNull('recover_at')->exists();
 
-        return Inertia::render('Workspace', ['history' => $rows, 'active' => $active, 'userId' => $request->user()->id]);
+        return Inertia::render('Workspace', ['history' => $rows, 'active' => $active, 'userId' => $request->user()->id, 'isOperator' => (bool) $request->user()->is_operator]);
     }
 
     public function quote(GenerationInput $request, Quotes $quotes): JsonResponse

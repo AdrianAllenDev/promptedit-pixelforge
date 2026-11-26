@@ -19,6 +19,7 @@ type Generation = {
 type Input = { prompt: string; size: string; quality: string; reference_images: string[] };
 const props = defineProps<{
     userId: number;
+    isOperator: boolean;
     active: boolean;
     history: { data: Generation[]; next_page_url: string | null; prev_page_url: string | null };
 }>();
@@ -121,6 +122,7 @@ onBeforeUnmount(() => clearInterval(timer));
     <main class="shell">
         <header>
             <span>Pixelforge</span>
+            <Link v-if="isOperator" href="/operator/report" class="report-link">Operator report</Link>
             <details class="account-menu">
                 <summary aria-label="Account menu"><UserRound aria-hidden="true" /></summary>
                 <Link as="button" method="post" href="/logout">Sign out</Link>
