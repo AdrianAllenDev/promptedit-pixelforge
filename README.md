@@ -10,7 +10,7 @@ The initial production check on November 26, 2026 recorded charges of $0.0658812
 
 ## Operator report
 
-Open **Operator report** from the workspace. The report reads final bills by UTC completion day and attributes spend to the local user. Each run fetches the deployed key's usage for the inclusive range (up to 92 days). Difference is local cost minus provider cost. An unavailable or incomplete response leaves the comparison unavailable. Operator access is stored on the user record and can only be granted by an administrator.
+Sign in at `/admin/login` with the separately supplied admin credentials to open `/admin/report`. The admin area uses its own session guard and account table. Customer registration creates workspace accounts only. To provision an administrator, run `php artisan admin:create` in a trusted terminal and enter the email and password at the prompts. The report reads final bills by UTC completion day and attributes spend to the local user. Each run fetches the deployed key's usage for the inclusive range (up to 92 days). Difference is local cost minus provider cost. An unavailable or incomplete response leaves the comparison unavailable.
 
 ## Local setup
 

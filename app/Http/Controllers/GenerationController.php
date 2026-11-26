@@ -29,7 +29,6 @@ class GenerationController extends Controller
         return Inertia::render('Workspace', [
             'history' => $rows, 'active' => $active, 'userId' => $request->user()->id,
             'walletsEnabled' => (bool) config('services.pixelforge.wallets_enabled'),
-            'isOperator' => (bool) $request->user()->is_operator,
         ]);
     }
 
