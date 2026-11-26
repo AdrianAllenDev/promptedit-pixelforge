@@ -39,6 +39,13 @@ jobs:
         env:
           DB_DATABASE: pixelforge_test
       - run: npm run test:browser
+      - name: Save responsive workspace screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-screenshots
+          path: test-results/workspace-*.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Build and exercise the Cloud Run container
         run: |
           docker build -t pixelforge:ci .
