@@ -115,8 +115,8 @@ class GenerationFlowTest extends TestCase
         $this->assertDatabaseEmpty('final_bills');
         $this->travel(10)->seconds();
         $this->artisan('pixelforge:recover')->assertSuccessful();
-        $this->assertSame($submits[0],$submits[1]);
-        $this->assertDatabaseHas('generations',['status' => 'succeeded']);
-        $this->assertDatabaseCount('final_bills',1);
+        $this->assertSame($submits[0], $submits[1]);
+        $this->assertDatabaseHas('generations', ['status' => 'succeeded']);
+        $this->assertDatabaseCount('final_bills', 1);
     }
 }
