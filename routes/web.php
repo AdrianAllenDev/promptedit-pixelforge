@@ -1,9 +1,15 @@
 <?php
 
+use App\Http\Controllers\GenerationController;
+use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
+Route::post('webhooks/pixelforge', WebhookController::class);
 Route::redirect('/', '/dashboard');
-Route::get('/dashboard', fn () => Inertia::render('Workspace'))->middleware('auth')->name('dashboard');
+Route::middleware('auth')->group(function () {
+    Route::get('dashboard', [GenerationController::class, 'index'])->name('dashboard');
+    Route::post('quotes', [GenerationController::class, 'quote'])->name('quotes');
+    Route::post('generations', [GenerationController::class, 'store'])->name('generations.store');
+});
 
 require __DIR__.'/auth.php';
