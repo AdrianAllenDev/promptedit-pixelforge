@@ -39,3 +39,9 @@ jobs:
         env:
           DB_DATABASE: pixelforge_test
       - run: npm run test:browser
+      - name: Build and exercise the Cloud Run container
+        run: |
+          docker build -t pixelforge:ci .
+          docker run -d --name pixelforge-web --network host --env-file <(sed '/^#/d; /^$/d' .env | grep -vE '^(APP_ENV|APP_DEBUG|DB_|PORT)') -e DB_CONNECTION=pgsql -e DB_HOST=127.0.0.1 -e DB_PORT=5432 -e DB_USERNAME=pixelforge -e DB_PASSWORD -e DB_DATABASE=pixelforge_test -e PORT=8090 pixelforge:ci
+          curl --fail --retry 15 --retry-connrefused --retry-delay 1 http://127.0.0.1:8090/up
+          curl --fail http://127.0.0.1:8090/login | grep -q Pixelforge

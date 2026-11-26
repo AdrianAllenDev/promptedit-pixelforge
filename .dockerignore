@@ -1,0 +1,15 @@
+.git
+.env*
+!.env.example
+node_modules
+vendor
+public/build
+public/hot
+bootstrap/cache/*.php
+storage/logs/*.log
+storage/framework/views/*.php
+storage/framework/sessions/*
+storage/framework/cache/data/*
+playwright-report
+test-results
+.phpunit.result.cache
