@@ -207,7 +207,57 @@ class GenerationFlowTest extends TestCase
             $this->postJson('/generations', $this->input + ['submission_key' => (string) Str::uuid(), 'quote_token' => $quote['quote_token']])->assertAccepted();
         }
         $this->assertDatabaseCount('generations', 2);
-        $this->assertDatabaseCount('final_bills',2);
-        $this->assertEquals(0,DB::table('final_bills')->sum('customer_charge'));
+        $this->assertDatabaseCount('final_bills', 2);
+        $this->assertEquals(0, DB::table('final_bills')->sum('customer_charge'));
+    }
+
+    public function test_accepted_quote_survives_provider_rate_change_before_creation(): void
+    {
+        $this->input = ['prompt' => str_repeat('🌊', 400), 'size' => '1536x1024', 'quality' => 'high', 'reference_images' => ['https://example.org/a', 'https://example.org/b']];
+        Http::fake(function ($request) {
+            if (str_ends_with($request->url(), '/pricing')) {
+                return Http::response($this->pricing);
+            }
+            $object = $this->object($request['metadata']['local_id'], 'succeeded');
+            $object['rates']['output_tokens'] = '80';
+            $object['usage'] = array_combine(Pricing::CATEGORIES, [115, 1530, 6450, 8000]);
+
+            return Http::response($object, 202);
+        });
+        $quote = $this->offer();
+        $this->postJson('/generations', $this->input + ['submission_key' => (string) Str::uuid(), 'quote_token' => $quote['quote_token']])->assertAccepted();
+        $this->assertSame('0.467343750000', DB::table('accepted_quotes')->value('maximum'));
+        $bill = DB::table('final_bills')->first();
+        $this->assertSame('0.631875000000', $bill->provider_cost);
+        $this->assertSame('0.789843750000', $bill->customer_charge);
+    }
+
+    public function test_incomplete_success_awaits_authoritative_usage_even_with_a_late_processing_event(): void
+    {
+        $submissions = 0;
+        Http::fake(function ($request) use (&$submissions) {
+            if (str_ends_with($request->url(), '/pricing')) {
+                return Http::response($this->pricing);
+            }
+            if ($request->method() === 'POST') {
+                $submissions++;
+                $object = $this->object($request['metadata']['local_id'], 'succeeded');
+                $object['usage'] = null;
+
+                return Http::response($object, 202);
+            }
+            $id = substr(basename($request->url()), 4);
+
+            return Http::response($this->object($id, 'succeeded'));
+        });
+        $quote = $this->offer();
+        $id = $this->postJson('/generations', $this->input + ['submission_key' => (string) Str::uuid(), 'quote_token' => $quote['quote_token']])->json('id');
+        $this->event('evt_late', $this->object($id, 'processing'))->assertNoContent();
+        $this->assertDatabaseHas('generations', ['id' => $id, 'status' => 'succeeded']);
+        $this->assertDatabaseEmpty('final_bills');
+        $this->travel(2)->minutes();
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+        $this->assertSame(1, $submissions);
+        $this->assertDatabaseCount('final_bills', 1);
     }
 }
