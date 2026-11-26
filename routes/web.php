@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\GenerationController;
+use App\Http\Controllers\OperatorReportController;
 use App\Http\Controllers\WalletController;
 use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
@@ -8,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('webhooks/pixelforge', WebhookController::class);
 Route::redirect('/', '/dashboard');
 Route::middleware('auth')->group(function () {
+    Route::get('operator/report', OperatorReportController::class)->name('operator.report');
     Route::get('dashboard', [GenerationController::class, 'index'])->name('dashboard');
     Route::get('wallet', [WalletController::class, 'show'])->name('wallet');
     Route::post('wallet/top-ups', [WalletController::class, 'purchase']);

@@ -2,6 +2,7 @@
 
 // Test-only router for PHP's local web server. All Pixelforge traffic is simulated.
 use App\Pixelforge\Pricing;
+use Carbon\CarbonPeriod;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Http\Request;
@@ -23,6 +24,14 @@ Http::preventStrayRequests();
 Http::fake(function (ClientRequest $request) use ($pricing) {
     if ($request->url() === 'https://pixelforge.promptedit.dev/v1/pricing') {
         return Http::response($pricing);
+    }
+    if (str_starts_with($request->url(), 'https://pixelforge.promptedit.dev/v1/usage?')) {
+        $days = [];
+        foreach (CarbonPeriod::create($request['start_date'], $request['end_date']) as $day) {
+            $days[] = ['date' => $day->toDateString(), 'cost_usd' => '0.000000000'];
+        }
+
+        return Http::response(['data' => $days]);
     }
     if ($request->method() === 'POST' && str_ends_with($request->url(), '/generations')) {
         $failed = str_contains($request['prompt'], '[fail]');

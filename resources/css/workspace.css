@@ -1,3 +1,5 @@
+.workspace-nav {display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:.25rem .75rem;padding:0 .5rem;font-size:1rem}
+.workspace-nav a {display:inline-flex;align-items:center;min-height:44px;margin:0}
 header summary {
     list-style: none;
     cursor: pointer;

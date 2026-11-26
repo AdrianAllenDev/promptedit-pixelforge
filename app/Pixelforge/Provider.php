@@ -37,6 +37,11 @@ final class Provider
         return $this->authenticated()->withHeaders(['Idempotency-Key' => $key])->post('generations', $payload);
     }
 
+    public function usage(string $start, string $end): mixed
+    {
+        return $this->authenticated()->get('usage', ['start_date' => $start, 'end_date' => $end])->throw()->json();
+    }
+
     public function retrieve(string $id): Response
     {
         return $this->authenticated()->get('generations/'.rawurlencode($id));
