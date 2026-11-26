@@ -6,6 +6,7 @@ use App\Http\Requests\GenerationInput;
 use App\Models\Generation;
 use App\Pixelforge\Quotes;
 use App\Pixelforge\Recovery;
+use App\Pixelforge\Wallet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ class GenerationController extends Controller
             ->selectRaw("g.payload->>'prompt' as prompt")->simplePaginate(20);
         $active = Generation::where('user_id', $request->user()->id)->whereNotNull('recover_at')->exists();
 
-        return Inertia::render('Workspace', ['history' => $rows, 'active' => $active, 'userId' => $request->user()->id]);
+        return Inertia::render('Workspace', ['history' => $rows, 'active' => $active, 'walletsEnabled' => (bool) config('services.pixelforge.wallets_enabled'), 'userId' => $request->user()->id]);
     }
 
     public function quote(GenerationInput $request, Quotes $quotes): JsonResponse
@@ -33,7 +34,7 @@ class GenerationController extends Controller
         return response()->json($quotes->offer($request->payload(), $request->user()->id));
     }
 
-    public function store(GenerationInput $request, Quotes $quotes, Recovery $recovery): JsonResponse
+    public function store(GenerationInput $request, Quotes $quotes, Recovery $recovery, Wallet $wallet): JsonResponse
     {
         $userId = $request->user()->id;
         $input = $request->payload();
@@ -42,7 +43,7 @@ class GenerationController extends Controller
         $generation = $find();
         if (! $generation) {
             $quote = $quotes->accept($request->validated('quote_token'), $input, $userId);
-            $generation = DB::transaction(function () use ($userId, $key, $input, $quote, $find) {
+            $generation = DB::transaction(function () use ($userId, $key, $input, $quote, $find, $wallet) {
                 DB::table('users')->where('id', $userId)->lockForUpdate()->first();
                 if ($existing = $find()) {
                     return $existing;
@@ -50,6 +51,10 @@ class GenerationController extends Controller
                 $id = (string) Str::uuid();
                 $row = Generation::create(['id' => $id, 'user_id' => $userId, 'submission_key' => $key, 'payload' => [...$input, 'metadata' => ['local_id' => $id]], 'recover_at' => now()]);
                 DB::table('accepted_quotes')->insert(['generation_id' => $id, 'pricing' => json_encode($quote['pricing'], JSON_THROW_ON_ERROR), 'minimum' => $quote['min'], 'maximum' => $quote['max'], 'quoted_at' => $quote['quoted_at'], 'accepted_at' => now()]);
+
+                if ($quote['wallet_enabled'] ?? false) {
+                    $wallet->reserve($row, $quote['max']);
+                }
 
                 return $row;
             });

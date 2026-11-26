@@ -17,6 +17,12 @@ The initial production check on November 26, 2026 recorded charges of $0.0658812
 
 For verification run `npm run lint`, `npm run types`, `npm run build`, `vendor/bin/pint --test`, and `php artisan test`. PHPUnit uses the separate `pixelforge_test` database.
 
+## Credit wallet
+
+Set `PIXELFORGE_WALLETS_ENABLED=true` to enable balances locally. The Cloud Run release enables them by default. New submissions reserve their upper estimate before the provider call. Earlier submissions keep their original charges in history and reporting. A timeout keeps the hold until recovery establishes the outcome.
+
+Open **Wallet** in the workspace to buy simulated credits. The final bill releases its generation's hold and charges the exact amount calculated at provider acceptance rates. Any overage uses unreserved credit, then becomes an amount due. Other pending holds stay reserved. New submissions require sufficient available funds and a cleared debt. A top-up pays the debt first. Repeating a purchase identifier credits it once.
+
 ## Pixelforge and recovery
 
 Set `PIXELFORGE_API_KEY` and `PIXELFORGE_WEBHOOK_SECRET` in the local environment. Use a different API key for the deployed app. For local webhooks, point that key at a public HTTPS tunnel to `/webhooks/pixelforge` and send a dashboard test event. Never commit keys or signed image URLs.

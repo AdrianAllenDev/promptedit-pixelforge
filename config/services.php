@@ -16,6 +16,7 @@ return [
 
     'pixelforge' => [
         'key' => env('PIXELFORGE_API_KEY'),
+        'wallets_enabled' => env('PIXELFORGE_WALLETS_ENABLED', false),
         'secret' => env('PIXELFORGE_WEBHOOK_SECRET'),
     ],
 

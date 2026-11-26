@@ -20,9 +20,10 @@ class Quotes
             report($e);
             throw new HttpResponseException(response()->json(['message' => 'Pricing is unavailable. Please try again.'], 503));
         }
-        $record = ['input' => $input, 'user_id' => $userId, 'quoted_at' => now()->toIso8601String(), 'pricing' => $pricing, ...$bounds];
+        $walletEnabled = (bool) config('services.pixelforge.wallets_enabled');
+        $record = ['wallet_enabled' => $walletEnabled, 'input' => $input, 'user_id' => $userId, 'quoted_at' => now()->toIso8601String(), 'pricing' => $pricing, ...$bounds];
 
-        return [...$bounds, 'quote_token' => Crypt::encryptString(json_encode($record, JSON_THROW_ON_ERROR))];
+        return [...$bounds, 'wallet_enabled' => $walletEnabled, 'quote_token' => Crypt::encryptString(json_encode($record, JSON_THROW_ON_ERROR))];
     }
 
     public function accept(string $token, array $input, int $userId): array
@@ -37,6 +38,9 @@ class Quotes
         }
         $current = $this->offer($input, $userId, true);
         $new = json_decode(Crypt::decryptString($current['quote_token']), true);
+        if (($quoted['wallet_enabled'] ?? false) !== $new['wallet_enabled']) {
+            throw new HttpResponseException(response()->json(['message' => 'Wallet availability changed. Review the updated estimate before submitting.', 'quote' => $current], 409));
+        }
         if ($new['pricing'] != $quoted['pricing']) {
             throw new HttpResponseException(response()->json(['message' => 'Pricing changed. Review this estimate and generate again.', 'quote' => $current], 409));
         }

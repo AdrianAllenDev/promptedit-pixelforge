@@ -6,7 +6,7 @@ set -euo pipefail
 : "${RUNTIME_ACCOUNT:?Set the runtime service account email}"
 : "${SCHEDULER_ACCOUNT:?Set the scheduler service account email}"
 image="$REGION-docker.pkg.dev/$PROJECT_ID/pixelforge/app:$(git rev-parse --short=12 HEAD)"
-settings="APP_NAME=Pixelforge,APP_ENV=production,APP_DEBUG=false,DB_CONNECTION=pgsql,DB_HOST=/cloudsql/$INSTANCE_CONNECTION_NAME,DB_DATABASE=pixelforge,DB_USERNAME=pixelforge,SESSION_SECURE_COOKIE=true,LOG_CHANNEL=stderr"
+settings="APP_NAME=Pixelforge,APP_ENV=production,APP_DEBUG=false,DB_CONNECTION=pgsql,DB_HOST=/cloudsql/$INSTANCE_CONNECTION_NAME,DB_DATABASE=pixelforge,DB_USERNAME=pixelforge,SESSION_SECURE_COOKIE=true,LOG_CHANNEL=stderr,PIXELFORGE_WALLETS_ENABLED=${PIXELFORGE_WALLETS_ENABLED:-true}"
 secrets="APP_KEY=pixelforge-app-key:latest,DB_PASSWORD=pixelforge-db-password:latest,PIXELFORGE_API_KEY=pixelforge-api-key:latest,PIXELFORGE_WEBHOOK_SECRET=pixelforge-webhook-secret:latest"
 common=(--project "$PROJECT_ID" --region "$REGION" --image "$image" --service-account "$RUNTIME_ACCOUNT" --set-cloudsql-instances "$INSTANCE_CONNECTION_NAME" --set-secrets "$secrets" --set-env-vars "$settings")
 if [[ -n "${BUILD_ACCOUNT:-}" ]]; then
