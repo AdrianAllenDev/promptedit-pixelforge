@@ -1,0 +1,35 @@
+name: Check application
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pixelforge
+          POSTGRES_PASSWORD: ci_only
+          POSTGRES_DB: pixelforge_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DB_PORT: 5432
+      DB_PASSWORD: ci_only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, bcmath
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cp .env.example .env
+      - run: composer install --prefer-dist --no-interaction
+      - run: php artisan key:generate
+      - run: npm ci
+      - run: npm run lint && npm run types && npm run build
+      - run: vendor/bin/pint --test && php artisan test
