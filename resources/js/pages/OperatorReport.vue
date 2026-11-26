@@ -14,9 +14,9 @@ const usd = (value: string | null) => value === null ? 'Unavailable' : '$' + val
 <template>
     <Head title="Operator report" />
     <main class="shell report">
-        <header><span>Pixelforge</span><Link href="/dashboard">Workspace</Link></header>
+        <header><span>Pixelforge administration</span><Link as="button" method="post" href="/admin/logout">Sign out</Link></header>
         <h1>Operator report</h1>
-        <form class="report-filter" @submit.prevent="filter.get('/operator/report', { preserveState: true, preserveScroll: true })">
+        <form class="report-filter" @submit.prevent="filter.get('/admin/report', { preserveState: true, preserveScroll: true })">
             <label>From (UTC)<input v-model="filter.start" type="date" required /><span role="alert" v-if="filter.errors.start">{{ filter.errors.start }}</span></label>
             <label>Through (UTC)<input v-model="filter.end" type="date" required /><span role="alert" v-if="filter.errors.end">{{ filter.errors.end }}</span></label>
             <button class="primary" :disabled="filter.processing">Run report</button>
@@ -37,7 +37,7 @@ const usd = (value: string | null) => value === null ? 'Unavailable' : '$' + val
     </main>
 </template>
 <style scoped>
-header a {font-size:1rem}
+header button {font-size:1rem}
 .report-filter,.report-totals {display:flex; gap:1rem; flex-wrap:wrap; align-items:end}
 .report-filter label {min-width:0}
 .report-filter input {display:block}

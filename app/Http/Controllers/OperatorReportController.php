@@ -13,7 +13,6 @@ class OperatorReportController extends Controller
 {
     public function __invoke(Request $request, OperatorReport $report): Response
     {
-        abort_unless($request->user()->is_operator, 403);
         $today = CarbonImmutable::today('UTC');
         $request->mergeIfMissing(['start' => $today->subDays(6)->toDateString(), 'end' => $today->toDateString()]);
         $range = $request->validate(['start' => ['required', 'date_format:Y-m-d'], 'end' => ['required', 'date_format:Y-m-d', 'after_or_equal:start']]);

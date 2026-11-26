@@ -12,11 +12,21 @@ test('operator can run a date filter and read amounts at four widths', async ({ 
     await page.getByLabel('Confirm password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page.getByRole('heading', { name: 'New generation' })).toBeVisible();
-    execFileSync('php', ['artisan', 'tinker', '--execute=DB::table("users")->where("email", "' + email + '")->update(["is_operator" => true]);'], {
+    await expect(page.getByRole('link', { name: 'Operator report' })).toHaveCount(0);
+    expect((await page.request.get('/admin/report')).status()).toBe(403);
+    expect((await page.request.get('/operator/report')).status()).toBe(403);
+
+    const admin = { email: randomUUID() + '@example.test', password: randomUUID() };
+    execFileSync('php', ['artisan', 'admin:create', '--credentials-file=-'], {
+        input: JSON.stringify(admin),
         env: { ...process.env, APP_ENV: 'testing', DB_DATABASE: 'pixelforge_test' },
     });
-    await page.reload();
-    await page.getByRole('link', { name: 'Operator report' }).click();
+    await page.goto('/admin/login');
+    await page.getByLabel('Email', { exact: true }).fill(admin.email);
+    await page.getByLabel('Password', { exact: true }).fill(admin.password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/admin\/report$/);
+
     await page.getByLabel('From (UTC)').fill('2026-11-26');
     await page.getByLabel('Through (UTC)').fill('2026-11-26');
     await page.getByRole('button', { name: 'Run report' }).press('Enter');
@@ -27,4 +37,8 @@ test('operator can run a date filter and read amounts at four widths', async ({ 
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
         await page.screenshot({ path: 'test-results/report-' + width + '.png', fullPage: true });
     }
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page.getByRole('heading', { name: 'Admin sign in' })).toBeVisible();
+    await page.goto('/admin/report');
+    await expect(page).toHaveURL(/\/admin\/login$/);
 });

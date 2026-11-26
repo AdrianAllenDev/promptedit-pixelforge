@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Admin;
 use App\Models\Generation;
 use App\Models\User;
 use App\Pixelforge\Pricing;
@@ -102,9 +103,9 @@ class WalletTest extends TestCase
         $this->assertDatabaseCount('final_bills', 1);
         $this->assertDatabaseCount('wallet_topups', 2);
         $this->reportedCost = '0.631875000';
-        $this->user->forceFill(['is_operator' => true])->save();
+        $this->actingAs(Admin::create(['email' => 'admin@example.test', 'password' => 'test-password']), 'admin');
         $date = now('UTC')->toDateString();
-        $this->get("/operator/report?start=$date&end=$date")->assertInertia(fn ($p) => $p
+        $this->get("/admin/report?start=$date&end=$date")->assertInertia(fn ($p) => $p
             ->where('report.total.customer_charge', '0.789843750000')->where('report.total.profit', '0.157968750000')
             ->where('report.total.difference', '0.000000000000'));
         $this->assertDatabaseCount('webhook_receipts', 1);
@@ -120,9 +121,9 @@ class WalletTest extends TestCase
         config(['services.pixelforge.wallets_enabled' => true]);
         $this->event($id, 'succeeded');
         $this->reportedCost = '0.373875000';
-        $this->user->forceFill(['is_operator' => true])->save();
+        $this->actingAs(Admin::create(['email' => 'admin@example.test', 'password' => 'test-password']), 'admin');
         $date = now('UTC')->toDateString();
-        $this->get("/operator/report?start=$date&end=$date")->assertInertia(fn ($p) => $p
+        $this->get("/admin/report?start=$date&end=$date")->assertInertia(fn ($p) => $p
             ->where('report.reconciled', true)->where('report.total.customer_charge', '0.467343750000')
             ->where('report.total.difference', '0.000000000000'));
         $this->get('/dashboard')->assertInertia(fn ($p) => $p->where('history.data.0.customer_charge', '0.467343750000'));
