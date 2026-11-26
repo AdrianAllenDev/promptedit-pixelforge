@@ -13,6 +13,6 @@ class Generation extends Model
 
     protected function casts(): array
     {
-        return ['payload' => 'array', 'recover_at' => 'datetime', 'completed_at' => 'datetime', 'image_expires_at' => 'datetime'];
+        return ['submission_uncertain' => 'boolean', 'payload' => 'array', 'recover_at' => 'datetime', 'completed_at' => 'datetime', 'image_expires_at' => 'datetime'];
     }
 }

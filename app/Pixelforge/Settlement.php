@@ -42,6 +42,7 @@ class Settlement
                 return 'already settled';
             }
             $g->provider_id = $providerId;
+            $g->submission_uncertain = false;
             $g->status = $status;
             $g->message = null;
             if (in_array($status, ['queued', 'processing'], true)) {
