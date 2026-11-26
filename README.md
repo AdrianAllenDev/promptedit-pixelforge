@@ -8,6 +8,10 @@ Sign in with the privately supplied reviewer login to see the existing examples 
 
 The initial production check on November 26, 2026 recorded charges of $0.065881250 for a square image, $0 for a forced failure and $0.364087500 for a landscape image with duplicate delivery. Eight signed HTTP deliveries produced six distinct event receipts and three final bills. For November 25–26 UTC, the deployed key reported $0.343975000 in provider cost, matching the local bills exactly. Total customer spend was $0.429968750 and profit was $0.085993750.
 
+## Operator report
+
+Open **Operator report** from the workspace. The report reads final bills by UTC completion day and attributes spend to the local user. Each run fetches the deployed key's usage for the inclusive range (up to 92 days). Difference is local cost minus provider cost. An unavailable or incomplete response leaves the comparison unavailable. Operator access is stored on the user record and can only be granted by an administrator.
+
 ## Local setup
 
 1. Create separate PostgreSQL databases named `pixelforge` and `pixelforge_test`. Give the application user access to both.

@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: workspace-screenshots
-          path: test-results/workspace-*.png
+          path: test-results/*.png
           if-no-files-found: error
           retention-days: 7
       - name: Build and exercise the Cloud Run container
