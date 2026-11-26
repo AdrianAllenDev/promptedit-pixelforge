@@ -25,6 +25,8 @@ class WalletTest extends TestCase
 
     private string $mode = 'queued';
 
+    private string $reportedCost = '0.000000000';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -36,6 +38,9 @@ class WalletTest extends TestCase
         Http::fake(function ($request) {
             if (str_ends_with($request->url(), '/pricing')) {
                 return Http::response($this->pricing);
+            }
+            if (str_contains($request->url(), '/usage?')) {
+                return Http::response(['data' => [['date' => $request['start_date'], 'cost_usd' => $this->reportedCost]]]);
             }
             if ($this->mode === 'timeout') {
                 throw new ConnectionException('Lost response');
@@ -96,6 +101,12 @@ class WalletTest extends TestCase
         $this->assertBalance('0.677500000000', '0.200000000000', '0.000000000000', '0.789843750000');
         $this->assertDatabaseCount('final_bills', 1);
         $this->assertDatabaseCount('wallet_topups', 2);
+        $this->reportedCost = '0.631875000';
+        $this->user->forceFill(['is_operator' => true])->save();
+        $date = now('UTC')->toDateString();
+        $this->get("/operator/report?start=$date&end=$date")->assertInertia(fn ($p) => $p
+            ->where('report.total.customer_charge', '0.789843750000')->where('report.total.profit', '0.157968750000')
+            ->where('report.total.difference', '0.000000000000'));
         $this->assertDatabaseCount('webhook_receipts', 1);
         $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'POST'));
     }
@@ -108,6 +119,12 @@ class WalletTest extends TestCase
         $oldOffer = $this->submission();
         config(['services.pixelforge.wallets_enabled' => true]);
         $this->event($id, 'succeeded');
+        $this->reportedCost = '0.373875000';
+        $this->user->forceFill(['is_operator' => true])->save();
+        $date = now('UTC')->toDateString();
+        $this->get("/operator/report?start=$date&end=$date")->assertInertia(fn ($p) => $p
+            ->where('report.reconciled', true)->where('report.total.customer_charge', '0.467343750000')
+            ->where('report.total.difference', '0.000000000000'));
         $this->get('/dashboard')->assertInertia(fn ($p) => $p->where('history.data.0.customer_charge', '0.467343750000'));
         $this->postJson('/generations', $oldOffer)->assertConflict()->assertJsonPath('quote.wallet_enabled', true);
         $this->assertDatabaseCount('wallet_holds', 0);
