@@ -4,7 +4,7 @@ import axios from 'axios';
 import { ChevronDown, UserRound } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
-type Quote = { min: string; max: string; quote_token: string };
+type Quote = { wallet_enabled: boolean; min: string; max: string; quote_token: string };
 type Generation = {
     id: string;
     prompt: string;
@@ -21,6 +21,7 @@ const props = defineProps<{
     userId: number;
     isOperator: boolean;
     active: boolean;
+    walletsEnabled: boolean;
     history: { data: Generation[]; next_page_url: string | null; prev_page_url: string | null };
 }>();
 const storageKey = 'pixelforge.submission.' + props.userId;
@@ -37,6 +38,7 @@ const input = reactive<Input>(saved?.input ?? empty);
 const key = ref(saved?.key ?? crypto.randomUUID());
 const payload = computed(() => ({ ...input, reference_images: input.reference_images.map((url) => url.trim()).filter(Boolean) }));
 const quote = ref<Quote | null>(null);
+const showWallet = computed(() => quote.value?.wallet_enabled ?? props.walletsEnabled);
 const busy = ref(false);
 const loading = ref(false);
 const message = ref('');
@@ -122,7 +124,10 @@ onBeforeUnmount(() => clearInterval(timer));
     <main class="shell">
         <header>
             <span>Pixelforge</span>
-            <Link v-if="isOperator" href="/operator/report" class="report-link">Operator report</Link>
+            <nav v-if="showWallet || isOperator" aria-label="Workspace navigation" class="workspace-nav">
+                <Link v-if="showWallet" href="/wallet">Wallet</Link>
+                <Link v-if="isOperator" href="/operator/report">Operator report</Link>
+            </nav>
             <details class="account-menu">
                 <summary aria-label="Account menu"><UserRound aria-hidden="true" /></summary>
                 <Link as="button" method="post" href="/logout">Sign out</Link>
@@ -181,8 +186,9 @@ onBeforeUnmount(() => clearInterval(timer));
                             </div>
                             <button class="primary" :disabled="!quote || busy">{{ busy ? 'Submitting…' : 'Generate' }}</button>
                         </div>
+                        <p v-if="showWallet" class="muted wallet-hint">The hold is the upper estimate at current rates. Your final charge uses the rates Pixelforge applies when it accepts your request.</p>
                         <p v-if="message" role="alert">
-                            {{ message }} <button v-if="!quote" type="button" class="text-action" @click="retry++">Retry estimate</button>
+                            {{ message }} <Link v-if="showWallet && message.startsWith('Insufficient')" href="/wallet">Buy test credits</Link> <button v-if="!quote" type="button" class="text-action" @click="retry++">Retry estimate</button>
                         </p>
                     </fieldset>
                 </form>

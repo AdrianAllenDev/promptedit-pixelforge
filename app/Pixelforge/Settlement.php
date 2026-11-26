@@ -11,7 +11,7 @@ use InvalidArgumentException;
 
 class Settlement
 {
-    public function __construct(private Pricing $pricing) {}
+    public function __construct(private Pricing $pricing, private Wallet $wallet) {}
 
     public function apply(array $object, ?string $expected = null): string
     {
@@ -74,6 +74,7 @@ class Settlement
             $g->message = $status === 'failed' ? ($object['error']['message'] ?? 'Generation failed.') : null;
             $g->recover_at = null;
             $g->save();
+            $this->wallet->lockForSettlement($g);
             DB::table('final_bills')->insert([...$bill, 'generation_id' => $g->id, 'usage' => json_encode($usage), 'rates' => json_encode($rates), 'created_at' => now()]);
 
             return 'settled';
@@ -84,6 +85,7 @@ class Settlement
     {
         // Only the caller holding the generation row lock can reject an unaccepted request.
         $g->update(['status' => 'failed', 'message' => $message, 'recover_at' => null, 'completed_at' => now()]);
+        $this->wallet->lockForSettlement($g);
         DB::table('final_bills')->insert(['generation_id' => $g->id, 'provider_cost' => 0, 'customer_charge' => 0, 'profit' => 0, 'created_at' => now()]);
     }
 }
