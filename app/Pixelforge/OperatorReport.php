@@ -19,7 +19,7 @@ final class OperatorReport
         $daily = [];
         for ($date = $start; $date <= $end; $date = $date->addDay()) {
             $day = $date->toDateString();
-            $daily[$day] = ['date' => $day] + self::ZERO;
+            $daily[$day] = ['date' => $day, 'users' => []] + self::ZERO;
         }
 
         // The provider assigns usage to its UTC completion day, including across midnight.
@@ -31,6 +31,8 @@ final class OperatorReport
         $users = [];
         $total = self::ZERO;
         foreach ($rows as $row) {
+            $daily[$row->day]['users'][] = ['id' => $row->id, 'name' => $row->name,
+                'customer_charge' => $row->customer_charge, 'provider_cost' => $row->provider_cost, 'profit' => $row->profit];
             $users[$row->id] ??= ['id' => $row->id, 'name' => $row->name] + self::ZERO;
             foreach (array_keys(self::ZERO) as $field) {
                 $daily[$row->day][$field] = (string) BigDecimal::of($daily[$row->day][$field])->plus($row->$field);

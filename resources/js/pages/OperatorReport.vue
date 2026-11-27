@@ -2,9 +2,10 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 type Amounts = { customer_charge: string; provider_cost: string; profit: string };
 type Compared = Amounts & { reported: string | null; difference: string | null };
+type UserAmounts = Amounts & { id: number; name: string };
 const props = defineProps<{
     range: { start: string; end: string };
-    report: { daily: (Compared & { date: string })[]; users: (Amounts & { id: number; name: string })[]; total: Compared; checkedAt: string; reconciled: boolean };
+    report: { daily: (Compared & { date: string; users: UserAmounts[] })[]; users: UserAmounts[]; total: Compared; checkedAt: string; reconciled: boolean };
 }>();
 const filter = useForm({ ...props.range });
 const amounts = { customer_charge: 'Customer spend', provider_cost: 'Provider cost', profit: 'Profit' } as const;
@@ -28,7 +29,17 @@ const usd = (value: string | null) => value === null ? 'Unavailable' : '$' + val
         <p class="muted">Checked {{ report.checkedAt }}. Difference is local provider cost minus Pixelforge usage.</p>
         <h2>By UTC completion day</h2>
         <table><thead><tr><th scope="col">Day</th><th v-for="label in compared" :key="label" scope="col">{{ label }}</th></tr></thead>
-            <tbody><tr v-for="row in report.daily" :key="row.date"><th scope="row">{{ row.date }}</th><td v-for="(label,key) in compared" :key="key" :data-label="label">{{ usd(row[key]) }}</td></tr></tbody>
+            <tbody v-for="row in report.daily" :key="row.date">
+                <tr><th scope="row">{{ row.date }}</th><td v-for="(label,key) in compared" :key="key" :data-label="label">{{ usd(row[key]) }}</td></tr>
+                <tr v-if="row.users.length"><td class="breakdown" colspan="6">
+                    <details><summary>User breakdown for {{ row.date }}</summary>
+                        <section v-for="user in row.users" :key="user.id">
+                            <strong>{{ user.name }} (#{{ user.id }})</strong>
+                            <dl class="report-totals"><div v-for="(label,key) in amounts" :key="key"><dt>{{ label }}</dt><dd>{{ usd(user[key]) }}</dd></div></dl>
+                        </section>
+                    </details>
+                </td></tr>
+            </tbody>
         </table>
         <h2>By user</h2>
         <p v-if="!report.users.length">No settled generations in this range.</p>
@@ -47,6 +58,9 @@ header button {font-size:1rem}
 table {width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th,td {padding:.65rem .45rem;text-align:left;border-bottom:1px solid #575753;overflow-wrap:anywhere}
 th {color:#dedbd4}
+.breakdown {display:table-cell;text-align:left}
+.breakdown summary {padding:.65rem 0;cursor:pointer}
+.breakdown section {padding:.5rem 0}
 @media(max-width: 800px) {
     .report-filter label {flex:1 1 9rem}
     table,tbody,tr,td,tbody th {display:block}
@@ -54,5 +68,7 @@ th {color:#dedbd4}
     tr {margin-bottom:1rem;background:#242424;border-radius:.4rem;padding:.5rem}
     td {display:flex;justify-content:space-between;gap:.75rem;text-align:right}
     td::before {content:attr(data-label);text-align:left;color:#c7c5be}
+    .breakdown {display:block}
+    .breakdown::before {content:none}
 }
 </style>
