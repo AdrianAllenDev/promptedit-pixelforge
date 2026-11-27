@@ -9,6 +9,8 @@ type ReviewCase = {
     status: string;
     message: string | null;
     attempts: number;
+    submit_attempts: number | null;
+    poll_failures: number;
     created_at: string;
     recover_at: string | null;
     amount: string | null;
@@ -57,6 +59,7 @@ function releaseFunds(id: string) {
                 <dt>Submitted (UTC)</dt><dd>{{ item.created_at }}</dd>
                 <dt>Recorded status</dt><dd>{{ item.status }}</dd>
                 <dt>Recovery</dt><dd>{{ item.recover_at ? 'Scheduled' : 'Paused' }} · {{ item.attempts }} {{ item.attempts === 1 ? 'attempt' : 'attempts' }}</dd>
+                <dt>Provider calls</dt><dd>{{ item.submit_attempts ?? (item.provider_id ? 'Unknown' : item.attempts) }} submission attempts · {{ item.poll_failures }} consecutive failed polls</dd>
                 <dt>Wallet hold</dt><dd>{{ states[item.hold_state] }}<template v-if="item.amount"> · {{ usd(item.amount) }}</template></dd>
                 <dt>Review deadline (UTC)</dt><dd>{{ item.deadline }}</dd>
                 <template v-if="item.released_at"><dt>Release decision</dt><dd>{{ item.reviewer }} · {{ item.released_at }} · {{ item.release_reason }}</dd></template>

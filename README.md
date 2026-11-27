@@ -33,6 +33,8 @@ Open **Wallet** in the workspace to buy simulated credits. The final bill releas
 
 ## Pixelforge and recovery
 
+Automatic recovery allows eight submission attempts before acceptance. For an accepted generation, eight consecutive unsuccessful status checks trigger review. A valid queued or processing poll clears the failure streak. An incomplete success needs another check. At 60 minutes from original submission the next due claim pauses for operator review. An explicit `--resume=LOCAL_UUID` makes one bounded check of the paused case, including after this deadline. It honors provider backoff, preserves the total call count, and leaves the original 24-hour hold deadline in place. During a rolling deployment, the new worker reads the current attempt count under lock before each unaccepted submission. Legacy accepted rows start with zero known consecutive failures and retain their recorded total. Previously paused cases require operator action.
+
 Set `PIXELFORGE_API_KEY` and `PIXELFORGE_WEBHOOK_SECRET` in the local environment. Use a different API key for the deployed app. For local webhooks, point that key at a public HTTPS tunnel to `/webhooks/pixelforge` and send a dashboard test event. Never commit keys or signed image URLs.
 
 Open the signed-in workspace, enter a prompt, and review its USD estimate. Laravel validates the accepted quote again at submission. The immutable request includes a local UUID that Pixelforge echoes in webhooks. Provider calls happen outside database transactions. The history page reads local PostgreSQL records.

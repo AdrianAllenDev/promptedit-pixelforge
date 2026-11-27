@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Generation;
 use App\Models\User;
 use App\Pixelforge\Pricing;
+use App\Pixelforge\Wallet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -136,6 +138,184 @@ class GenerationFlowTest extends TestCase
         }
         $this->assertDatabaseHas('generations', ['attempts' => 8, 'status' => 'failed', 'recover_at' => null]);
         $this->assertSame('0.000000000000', DB::table('final_bills')->value('customer_charge'));
+    }
+
+    private function fundedSubmission(): Generation
+    {
+        config(['services.pixelforge.wallets_enabled' => true]);
+        $this->postJson('/wallet/top-ups', ['amount' => '1.00', 'purchase_key' => (string) Str::uuid()])->assertOk();
+        $data = $this->input + ['submission_key' => (string) Str::uuid(), 'quote_token' => $this->offer()['quote_token']];
+
+        return Generation::findOrFail($this->postJson('/generations', $data)->assertAccepted()->json('id'));
+    }
+
+    private function recoverWhenDue(Generation $g): void
+    {
+        $due = $g->refresh()->recover_at;
+        $this->assertNotNull($due, 'Recovery paused before the expected provider call.');
+        $this->travelTo($due);
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+    }
+
+    public function test_scheduled_recovery_settles_after_three_rejections_and_nine_healthy_polls_without_webhooks(): void
+    {
+        $this->freezeSecond();
+        $posts = [];
+        $accepted = $polls = 0;
+        Http::fake(function (Request $r) use (&$posts, &$accepted, &$polls) {
+            if (str_ends_with($r->url(), '/pricing')) {
+                return Http::response($this->pricing);
+            }
+            if ($r->method() === 'POST') {
+                $posts[] = [$r->header('Idempotency-Key'), $r->data()];
+                if (count($posts) <= 3) {
+                    return Http::response(['error' => ['code' => 'overloaded']], 503, ['Retry-After' => '30']);
+                }
+                $accepted++;
+
+                return Http::response($this->object($r['metadata']['local_id'], 'queued'), 202);
+            }
+
+            return Http::response($this->object(substr(basename($r->url()), 4), ++$polls <= 9 ? 'processing' : 'succeeded'));
+        });
+        $g = $this->fundedSubmission();
+        for ($i = 0; $i < 13; $i++) {
+            $this->recoverWhenDue($g);
+        }
+        $this->assertCount(4, $posts);
+        $this->assertSame(array_fill(0, 4, $posts[0]), $posts);
+        $this->assertSame(1, $accepted);
+        $this->assertSame(10, $polls);
+        $this->assertDatabaseHas('generations', ['id' => $g->id, 'attempts' => 14, 'submit_attempts' => 4, 'status' => 'succeeded']);
+        $this->assertDatabaseCount('wallet_holds', 1);
+        $this->assertDatabaseCount('webhook_receipts', 0);
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->assertSame(['available' => '0.932253125000', 'due' => '0.000000000000', 'held' => '0.000000000000',
+            'spent' => '0.067746875000'], app(Wallet::class)->balance($this->user->id));
+    }
+
+    public function test_a_healthy_poll_clears_the_streak_but_eight_unusable_checks_pause(): void
+    {
+        $this->freezeSecond();
+        $poll = 0;
+        Http::fake(function (Request $r) use (&$poll) {
+            if (str_ends_with($r->url(), '/pricing')) {
+                return Http::response($this->pricing);
+            }
+            if ($r->method() === 'POST') {
+                return Http::response($this->object($r['metadata']['local_id'], 'queued'), 202);
+            }
+            $id = substr(basename($r->url()), 4);
+            if (++$poll === 8) {
+                return Http::response($this->object($id, 'processing'));
+            }
+            if ($poll > 8) {
+                return Http::response(['usage' => null] + $this->object($id, 'succeeded'));
+            }
+
+            return Http::response(['error' => ['code' => 'overloaded']], 503, ['Retry-After' => '30']);
+        });
+        $g = $this->fundedSubmission();
+        foreach ([1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 8] as $expected) {
+            $this->recoverWhenDue($g);
+            $this->assertSame($expected, $g->refresh()->poll_failures);
+        }
+        $this->assertNull($g->recover_at);
+        $this->assertDatabaseEmpty('final_bills');
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+        $this->assertSame(16, $poll);
+    }
+
+    public function test_an_overdue_generation_gets_one_operator_poll_and_one_bill_with_a_late_webhook(): void
+    {
+        $this->freezeSecond();
+        $polls = 0;
+        Http::fake(function (Request $r) use (&$polls) {
+            if (str_ends_with($r->url(), '/pricing')) {
+                return Http::response($this->pricing);
+            }
+            if ($r->method() === 'POST') {
+                return Http::response($this->object($r['metadata']['local_id'], 'processing'), 202);
+            }
+            $polls++;
+            $object = $this->object(substr(basename($r->url()), 4), 'succeeded');
+            $this->event('evt_late_success', $object)->assertNoContent();
+
+            return Http::response($object);
+        });
+        $g = $this->fundedSubmission();
+        $this->travel(60)->minutes();
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+        $this->assertNull($g->refresh()->recover_at);
+        $this->assertSame(0, $polls);
+        $this->event('evt_late_processing', $this->object($g->id, 'processing'))->assertNoContent();
+        $this->assertNull($g->refresh()->recover_at);
+        $this->assertFalse(app(Wallet::class)->holdWasReleased($g));
+        $this->travelTo($g->created_at->copy()->addHours(24));
+        $this->assertTrue(app(Wallet::class)->holdWasReleased($g));
+        $this->artisan('pixelforge:recover', ['--resume' => $g->id])->assertSuccessful();
+        $this->artisan('pixelforge:recover', ['--resume' => $g->id])->assertSuccessful();
+        $this->assertSame(1, $polls);
+        $this->assertSame(2, $g->refresh()->attempts);
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->assertSame('0.067746875000', app(Wallet::class)->balance($this->user->id)['spent']);
+    }
+
+    public function test_a_one_hour_operator_recheck_that_is_still_processing_stays_paused_until_the_webhook(): void
+    {
+        $this->freezeSecond();
+        $polls = 0;
+        Http::fake(function (Request $r) use (&$polls) {
+            if (str_ends_with($r->url(), '/pricing')) {
+                return Http::response($this->pricing);
+            }
+            if ($r->method() === 'POST') {
+                return Http::response($this->object($r['metadata']['local_id'], 'queued'), 202);
+            }
+            $polls++;
+
+            return Http::response($this->object(substr(basename($r->url()), 4), 'processing'));
+        });
+        $g = $this->fundedSubmission();
+        $this->travel(60)->minutes();
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+        $this->assertNull($g->refresh()->recover_at);
+        $this->artisan('pixelforge:recover', ['--resume' => $g->id])->assertSuccessful();
+        $this->assertSame(1, $polls);
+        $this->assertNull($g->refresh()->recover_at);
+        $this->travel(2)->minutes();
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+        $this->assertSame(1, $polls);
+        $this->assertFalse(app(Wallet::class)->holdWasReleased($g));
+        $this->event('evt_after_recheck', $this->object($g->id, 'succeeded'))->assertNoContent();
+        $this->event('evt_after_recheck', $this->object($g->id, 'succeeded'))->assertNoContent();
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->assertDatabaseCount('webhook_receipts', 1);
+        $this->assertSame('0.932253125000', app(Wallet::class)->balance($this->user->id)['available']);
+    }
+
+    public function test_claims_inherit_mixed_revision_writes_and_leave_legacy_pauses_under_operator_control(): void
+    {
+        $this->freezeSecond();
+        Http::fake(fn (Request $r) => $r->method() === 'POST'
+            ? Http::response(['error' => ['code' => 'overloaded']], 503)
+            : Http::response($this->object(substr(basename($r->url()), 4), 'processing')));
+        $legacy = fn () => Generation::create(['user_id' => $this->user->id, 'submission_key' => (string) Str::uuid(),
+            'payload' => $this->input, 'attempts' => 6, 'recover_at' => now()]);
+        $active = $legacy();
+        $accepted = $legacy();
+        $accepted->update(['provider_id' => 'gen_'.$accepted->id, 'attempts' => 8]);
+        $paused = $legacy();
+        $paused->update(['recover_at' => null]);
+        // The old worker knows only attempts and can retry even after new columns exist.
+        DB::table('generations')->where('id', $active->id)->increment('attempts');
+        $this->artisan('pixelforge:recover')->assertSuccessful();
+        $this->assertDatabaseHas('generations', ['id' => $active->id, 'attempts' => 8, 'submit_attempts' => 8, 'status' => 'failed']);
+        $this->assertDatabaseHas('generations', ['id' => $accepted->id, 'attempts' => 9, 'poll_failures' => 0, 'status' => 'processing']);
+        $this->assertNotNull($accepted->refresh()->recover_at);
+        $this->assertNull($paused->refresh()->recover_at);
+        $this->assertSame(6, $paused->attempts);
+        Http::assertSentCount(2);
     }
 
     public function test_ambiguous_submit_followed_by_quota_error_stays_recoverable(): void

@@ -36,7 +36,7 @@ class Settlement
                 return 'ignored';
             }
             if ($g->status === 'processing' && $status === 'queued') {
-                return 'ignored';
+                $status = 'processing';
             }
             if (DB::table('final_bills')->where('generation_id', $g->id)->exists()) {
                 return 'already settled';
@@ -44,9 +44,14 @@ class Settlement
             $g->provider_id = $providerId;
             $g->submission_uncertain = false;
             $g->status = $status;
-            $g->message = null;
             if (in_array($status, ['queued', 'processing'], true)) {
-                $g->recover_at = now()->addSeconds(30);
+                if ($expected) {
+                    $g->poll_failures = 0;
+                    if ($g->recover_at) {
+                        $g->recover_at = now()->addSeconds(30)->min($g->created_at->copy()->addHour());
+                        $g->message = null;
+                    }
+                }
                 $g->save();
 
                 return 'updated';
@@ -63,7 +68,9 @@ class Settlement
                     : ['provider_cost' => '0', 'customer_charge' => '0', 'profit' => '0'];
             } catch (InvalidArgumentException|MathException|\TypeError) {
                 $g->message = 'Waiting for complete provider billing details.';
-                $g->recover_at = now()->addMinute();
+                if ($expected && $g->recover_at) {
+                    $g->recover_at = now()->addMinute();
+                }
                 $g->save();
 
                 return 'needs recovery';

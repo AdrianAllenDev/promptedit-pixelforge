@@ -32,7 +32,7 @@ final class GenerationReview
         return $this->unresolved()
             ->join('users as u', 'u.id', '=', 'g.user_id')
             ->leftJoin('admins as a', 'a.id', '=', 'h.released_by')
-            ->select('g.id', 'g.provider_id', 'g.created_at', 'g.status', 'g.message', 'g.attempts', 'g.recover_at',
+            ->select('g.id', 'g.provider_id', 'g.created_at', 'g.status', 'g.message', 'g.attempts', 'g.submit_attempts', 'g.poll_failures', 'g.recover_at',
                 'u.email as customer', 'h.amount', 'h.released_at', 'h.release_reason', 'a.email as reviewer')
             ->orderBy('g.created_at')->orderBy('g.id')->simplePaginate(25)
             ->through(function ($case) {
