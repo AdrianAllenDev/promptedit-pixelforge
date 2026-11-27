@@ -26,6 +26,8 @@ class WalletTest extends TestCase
 
     private string $mode = 'queued';
 
+    private int $providerSubmissions = 0;
+
     private string $reportedCost = '0.000000000';
 
     protected function setUp(): void
@@ -42,6 +44,9 @@ class WalletTest extends TestCase
             }
             if (str_contains($request->url(), '/usage?')) {
                 return Http::response(['data' => [['date' => $request['start_date'], 'cost_usd' => $this->reportedCost]]]);
+            }
+            if ($request->method() === 'POST') {
+                $this->providerSubmissions++;
             }
             if ($this->mode === 'timeout') {
                 throw new ConnectionException('Lost response');
@@ -110,6 +115,31 @@ class WalletTest extends TestCase
             ->where('report.total.difference', '0.000000000000'));
         $this->assertDatabaseCount('webhook_receipts', 1);
         $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'POST'));
+    }
+
+    public function test_an_unsettled_hold_expires_at_24_hours_even_if_recovery_is_offline(): void
+    {
+        $this->freezeSecond();
+        $this->mode = 'timeout';
+        $this->postJson('/wallet/top-ups', ['amount' => '1.00', 'purchase_key' => (string) Str::uuid()])->assertOk();
+        $id = $this->submit();
+        Generation::whereKey($id)->update(['recover_at' => null]);
+        $this->travel(24 * 60 * 60 - 1)->seconds();
+        $other = $this->submit();
+        $this->assertBalance('0.065312500000', '0.934687500000', '0.000000000000', '0.000000000000');
+        $this->travel(1)->second();
+        $this->assertBalance('0.532656250000', '0.467343750000', '0.000000000000', '0.000000000000');
+        $this->get('/dashboard')->assertInertia(fn ($page) => $page->where('active', true)
+            ->where('history.data.1.hold_released', true)->where('history.data.1.customer_charge', null));
+        $this->artisan('pixelforge:recover', ['--resume' => $id])->assertSuccessful();
+        $this->assertSame(2, $this->providerSubmissions);
+        $this->assertDatabaseCount('final_bills', 0);
+        $this->event($id, 'succeeded', '80');
+        $this->event($id, 'succeeded', '80');
+        $this->assertBalance('0.000000000000', '0.467343750000', '0.257187500000', '0.789843750000');
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->event($other, 'failed');
+        $this->assertBalance('0.210156250000', '0.000000000000', '0.000000000000', '0.789843750000');
     }
 
     public function test_rollout_preserves_earlier_charges_and_requotes_an_old_offer(): void

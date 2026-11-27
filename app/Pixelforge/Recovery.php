@@ -8,13 +8,19 @@ use Illuminate\Support\Facades\DB;
 
 class Recovery
 {
-    public function __construct(private Provider $provider, private Settlement $settlement) {}
+    public function __construct(private Provider $provider, private Settlement $settlement, private Wallet $wallet) {}
 
     public function run(string $id): void
     {
         $claim = DB::transaction(function () use ($id) {
             $g = Generation::whereKey($id)->lockForUpdate()->firstOrFail();
             if (! $g->recover_at || $g->recover_at->isFuture()) {
+                return null;
+            }
+            // A replay can create the image for the first time. Only poll a known provider ID after release.
+            if (! $g->provider_id && $this->wallet->holdWasReleased($g)) {
+                $g->update(['recover_at' => null, 'message' => 'Awaiting confirmation from Pixelforge.']);
+
                 return null;
             }
             if ($g->attempts >= 8) {

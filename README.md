@@ -23,7 +23,7 @@ For verification run `npm run lint`, `npm run types`, `npm run build`, `vendor/b
 
 ## Credit wallet
 
-Set `PIXELFORGE_WALLETS_ENABLED=true` to enable balances locally. The Cloud Run release enables them by default. New submissions reserve their upper estimate before the provider call. Earlier submissions keep their original charges in history and reporting. A timeout keeps the hold until recovery establishes the outcome.
+Set `PIXELFORGE_WALLETS_ENABLED=true` to enable balances locally. The Cloud Run release enables them by default. New submissions reserve their upper estimate before the provider call. Earlier submissions keep their original charges in history and reporting. An unresolved hold expires 24 hours after the original submission, even if the recovery job is offline. Retries never extend that deadline. A late confirmed success posts its exact charge once under the existing overage policy. A late failure costs zero.
 
 Open **Wallet** in the workspace to buy simulated credits. The final bill releases its generation's hold and charges the exact amount calculated at provider acceptance rates. Any overage uses unreserved credit, then becomes an amount due. Other pending holds stay reserved. New submissions require sufficient available funds and a cleared debt. A top-up pays the debt first. Repeating a purchase identifier credits it once.
 

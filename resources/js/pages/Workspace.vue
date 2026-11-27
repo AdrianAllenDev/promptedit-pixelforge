@@ -15,6 +15,7 @@ type Generation = {
     minimum: string;
     maximum: string;
     customer_charge: string | null;
+    hold_released: boolean;
 };
 type Input = { prompt: string; size: string; quality: string; reference_images: string[] };
 const props = defineProps<{
@@ -208,6 +209,7 @@ onBeforeUnmount(() => clearInterval(timer));
                             <p v-else class="muted">{{ expired(row) ? 'Image link expired.' : 'Image unavailable.' }}</p></template
                         >
                         <p v-if="row.message">{{ row.message }}</p>
+                        <p v-if="row.hold_released">Your hold has been released. A confirmed success will still be billed.</p>
                         <dl>
                             <dt>Estimated</dt>
                             <dd>{{ money(row.minimum) }}–{{ money(row.maximum) }}</dd>

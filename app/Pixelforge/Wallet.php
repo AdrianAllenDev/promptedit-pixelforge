@@ -4,6 +4,7 @@ namespace App\Pixelforge;
 
 use App\Models\Generation;
 use Brick\Math\BigDecimal;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -11,17 +12,31 @@ final class Wallet
 {
     public const PURCHASE_AMOUNTS = ['1.00', '5.00', '10.00'];
 
+    public const MAX_HOLD_HOURS = 24;
+
+    public static function expiredBeforeOrAt(): Carbon
+    {
+        return now()->subHours(self::MAX_HOLD_HOURS);
+    }
+
+    public function holdWasReleased(Generation $generation): bool
+    {
+        $hold = DB::table('wallet_holds')->where('generation_id', $generation->id)->first(['released_at']);
+
+        return $hold && ($hold->released_at !== null || $generation->created_at->lte(self::expiredBeforeOrAt()));
+    }
+
     public function balance(int $userId): array
     {
         // One snapshot keeps available, outstanding holds and debt consistent during settlement.
         $row = DB::selectOne('
             select (select coalesce(sum(amount), 0) from wallet_topups where user_id = ?) as purchased,
-                   coalesce(sum(h.amount) filter (where b.generation_id is null), 0) as held,
+                   coalesce(sum(h.amount) filter (where b.generation_id is null and h.released_at is null and g.created_at > ?), 0) as held,
                    coalesce(sum(b.customer_charge), 0) as spent
               from wallet_holds h
               join generations g on g.id = h.generation_id
               left join final_bills b on b.generation_id = g.id
-             where g.user_id = ?', [$userId, $userId]);
+             where g.user_id = ?', [$userId, self::expiredBeforeOrAt(), $userId]);
         $net = BigDecimal::of($row->purchased)->minus($row->spent)->minus($row->held);
 
         return [
