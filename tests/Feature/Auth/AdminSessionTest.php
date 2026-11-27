@@ -15,10 +15,11 @@ class AdminSessionTest extends TestCase
     public function test_workspace_credentials_and_legacy_grants_cannot_open_either_report_url(): void
     {
         $customer = User::factory()->create(['is_operator' => true]);
-        foreach (['/admin/report', '/operator/report'] as $url) {
+        foreach (['/admin/report', '/operator/report', '/admin/generations/review'] as $url) {
             $this->get($url)->assertRedirect('/admin/login');
             $this->getJson($url)->assertUnauthorized();
         }
+        $this->postJson('/admin/generations/00000000-0000-4000-8000-000000000001/release', ['reason' => 'Guest'])->assertUnauthorized();
         $this->post('/login', ['email' => $customer->email, 'password' => 'password'])->assertRedirect('/dashboard');
         $this->get('/dashboard')->assertInertia(fn ($p) => $p->missing('isOperator'));
         foreach (['/admin/report', '/operator/report'] as $url) {

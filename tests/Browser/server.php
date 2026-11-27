@@ -34,6 +34,9 @@ Http::fake(function (ClientRequest $request) use ($pricing) {
         return Http::response(['data' => $days]);
     }
     if ($request->method() === 'POST' && str_ends_with($request->url(), '/generations')) {
+        if (str_contains($request['prompt'], '[review]')) {
+            return Http::response(['error' => ['code' => 'invalid_api_key']], 401);
+        }
         $failed = str_contains($request['prompt'], '[fail]');
 
         return Http::response([

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AdminSessionController;
 use App\Http\Controllers\GenerationController;
+use App\Http\Controllers\GenerationReviewController;
 use App\Http\Controllers\OperatorReportController;
 use App\Http\Controllers\WalletController;
 use App\Http\Controllers\WebhookController;
@@ -23,6 +24,8 @@ Route::get('admin/login', [AdminSessionController::class, 'create'])->name('admi
 Route::post('admin/login', [AdminSessionController::class, 'store'])->name('admin.authenticate');
 Route::middleware([RequireAdminSession::class, 'cache.headers:no_store;private', 'inertia.encrypt'])->group(function () {
     Route::get('admin/report', OperatorReportController::class)->name('admin.report');
+    Route::get('admin/generations/review', [GenerationReviewController::class, 'index'])->name('admin.generations.review');
+    Route::post('admin/generations/{generation}/release', [GenerationReviewController::class, 'release'])->whereUuid('generation');
     Route::get('operator/report', fn (Request $request) => to_route('admin.report', $request->only('start', 'end')));
     Route::post('admin/logout', [AdminSessionController::class, 'destroy'])->name('admin.logout');
 });

@@ -26,6 +26,8 @@ class WalletTest extends TestCase
 
     private string $mode = 'queued';
 
+    private int $providerSubmissions = 0;
+
     private string $reportedCost = '0.000000000';
 
     protected function setUp(): void
@@ -42,6 +44,9 @@ class WalletTest extends TestCase
             }
             if (str_contains($request->url(), '/usage?')) {
                 return Http::response(['data' => [['date' => $request['start_date'], 'cost_usd' => $this->reportedCost]]]);
+            }
+            if ($request->method() === 'POST') {
+                $this->providerSubmissions++;
             }
             if ($this->mode === 'timeout') {
                 throw new ConnectionException('Lost response');
@@ -110,6 +115,87 @@ class WalletTest extends TestCase
             ->where('report.total.difference', '0.000000000000'));
         $this->assertDatabaseCount('webhook_receipts', 1);
         $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'POST'));
+    }
+
+    public function test_an_unsettled_hold_expires_at_24_hours_even_if_recovery_is_offline(): void
+    {
+        $this->freezeSecond();
+        $this->mode = 'timeout';
+        $this->postJson('/wallet/top-ups', ['amount' => '1.00', 'purchase_key' => (string) Str::uuid()])->assertOk();
+        $id = $this->submit();
+        Generation::whereKey($id)->update(['recover_at' => null]);
+        $this->travel(24 * 60 * 60 - 1)->seconds();
+        $other = $this->submit();
+        $this->assertBalance('0.065312500000', '0.934687500000', '0.000000000000', '0.000000000000');
+        $this->travel(1)->second();
+        $this->assertBalance('0.532656250000', '0.467343750000', '0.000000000000', '0.000000000000');
+        $this->get('/dashboard')->assertInertia(fn ($page) => $page->where('active', true)
+            ->where('history.data.1.hold_released', fn ($released) => (bool) $released)->where('history.data.1.customer_charge', null));
+        $this->artisan('pixelforge:recover', ['--resume' => $id])->assertSuccessful();
+        $this->assertSame(2, $this->providerSubmissions);
+        $this->assertDatabaseCount('final_bills', 0);
+        $this->event($id, 'succeeded', '80');
+        $this->event($id, 'succeeded', '80');
+        $this->assertBalance('0.000000000000', '0.467343750000', '0.257187500000', '0.789843750000');
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->event($other, 'failed');
+        $this->assertBalance('0.210156250000', '0.000000000000', '0.000000000000', '0.789843750000');
+    }
+
+    public function test_only_an_admin_can_review_and_release_one_unknown_submission(): void
+    {
+        $this->freezeSecond();
+        $this->postJson('/wallet/top-ups', ['amount' => '1.00', 'purchase_key' => (string) Str::uuid()])->assertOk();
+        $normal = $this->submit();
+        $this->mode = 'timeout';
+        $id = $this->submit();
+        $url = "/admin/generations/$id/release";
+        $queue = '/admin/generations/review';
+        $this->get($queue)->assertForbidden();
+        $this->postJson($url, ['reason' => 'Wrong account'])->assertForbidden();
+        $this->assertBalance('0.065312500000', '0.934687500000', '0.000000000000', '0.000000000000');
+
+        $admin = Admin::create(['email' => 'review@example.test', 'password' => 'test-password']);
+        $this->actingAs($admin, 'admin');
+        $this->get($queue)->assertInertia(fn ($p) => $p->has('cases.data', 1)->where('cases.data.0.id', $id)
+            ->where('cases.data.0.customer', $this->user->email)->where('cases.data.0.hold_state', 'held'));
+        $this->postJson($url, ['reason' => '  '])->assertUnprocessable();
+        $this->postJson("/admin/generations/$normal/release", ['reason' => 'Still processing normally'])->assertUnprocessable();
+        $this->post($url, ['reason' => 'Checked provider deliveries. No acceptance confirmed.'])->assertRedirect($queue);
+        $this->travel(1)->second();
+        $this->post($url, ['reason' => 'Second click'])->assertRedirect($queue);
+        $this->assertBalance('0.532656250000', '0.467343750000', '0.000000000000', '0.000000000000');
+        $this->assertDatabaseCount('final_bills', 0);
+        $this->get($queue)->assertInertia(fn ($p) => $p->where('cases.data.0.hold_state', 'released')
+            ->where('cases.data.0.reviewer', $admin->email)
+            ->where('cases.data.0.release_reason', 'Checked provider deliveries. No acceptance confirmed.'));
+        $this->artisan('pixelforge:recover', ['--resume' => $id])->assertSuccessful();
+        $this->assertSame(2, $this->providerSubmissions);
+        $this->event($id, 'failed');
+        $this->event($id, 'failed');
+        $this->assertBalance('0.532656250000', '0.467343750000', '0.000000000000', '0.000000000000');
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->assertDatabaseHas('wallet_holds', ['generation_id' => $id, 'released_by' => $admin->id]);
+    }
+
+    public function test_expired_and_pre_wallet_cases_are_reviewable_without_a_manual_release(): void
+    {
+        $this->freezeSecond();
+        $this->mode = 'timeout';
+        config(['services.pixelforge.wallets_enabled' => false]);
+        $legacy = $this->submit();
+        config(['services.pixelforge.wallets_enabled' => true]);
+        $this->postJson('/wallet/top-ups', ['amount' => '1.00', 'purchase_key' => (string) Str::uuid()])->assertOk();
+        $this->travel(1)->minute();
+        $id = $this->submit();
+        $this->travel(24)->hours();
+        $this->actingAs(Admin::create(['email' => 'review@example.test', 'password' => 'test-password']), 'admin');
+        $this->get('/admin/generations/review')->assertInertia(fn ($p) => $p->has('cases.data', 2)
+            ->where('cases.data.0.hold_state', 'none')->where('cases.data.1.hold_state', 'expired'));
+        $this->postJson("/admin/generations/$legacy/release", ['reason' => 'Legacy'])->assertUnprocessable();
+        $this->post("/admin/generations/$id/release", ['reason' => 'Already expired'])->assertRedirect();
+        $this->assertDatabaseHas('wallet_holds', ['generation_id' => $id, 'released_at' => null]);
+        $this->assertBalance('1.000000000000', '0.000000000000', '0.000000000000', '0.000000000000');
     }
 
     public function test_rollout_preserves_earlier_charges_and_requotes_an_old_offer(): void

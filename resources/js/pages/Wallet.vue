@@ -45,6 +45,7 @@ async function buy() {
     <main class="shell wallet">
         <header><span>Pixelforge</span><Link href="/dashboard">Workspace</Link></header>
         <h1>Credit wallet</h1>
+        <p class="muted">An unresolved image holds credit for up to 24 hours. An admin can release it earlier. If Pixelforge later confirms success, the charge uses available credit and any shortfall becomes an amount due.</p>
         <dl aria-live="polite"><div v-for="(label,key) in fields" :key="key"><dt>{{ label }}</dt><dd>{{ money(balance[key]) }}</dd></div></dl>
         <p v-if="!/^0(?:\.0+)?$/.test(balance.due)">Add credits to clear the amount due before generating another image.</p>
         <h2>Buy test credits</h2>

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Admin;
 use App\Models\Generation;
 use App\Models\User;
 use App\Pixelforge\Pricing;
@@ -50,6 +51,31 @@ class ConcurrentSettlementTest extends TestCase
         $this->assertDatabaseCount('wallet_holds', 1);
         $this->assertDatabaseCount('generations', 1);
         $this->assertSame('0.032656250000', app(Wallet::class)->balance($user->id)['available']);
+    }
+
+    public function test_manual_release_racing_a_webhook_leaves_one_charge_and_the_other_hold(): void
+    {
+        $user = User::factory()->create();
+        $admin = Admin::create(['email' => 'review@example.test', 'password' => 'test-password']);
+        $wallet = app(Wallet::class);
+        $wallet->topUp($user->id, (string) Str::uuid(), '1.00');
+        foreach (['0.20', '0.30'] as $amount) {
+            $generation = Generation::create(['user_id' => $user->id, 'submission_key' => (string) Str::uuid(), 'payload' => []]);
+            $wallet->reserve($generation, $amount);
+        }
+        $object = ['id' => 'gen_race', 'metadata' => ['local_id' => $generation->id], 'status' => 'succeeded', 'completed_at' => now()->toISOString(),
+            'usage' => array_combine(Pricing::CATEGORIES, [7, 765, 1100, 201]),
+            'rates' => array_combine(Pricing::CATEGORIES, ['5', '10', '40', '12.50'])];
+        $workers = [];
+        foreach (['release', 'webhook'] as $action) {
+            $workers[] = new Process([PHP_BINARY, base_path('tests/Fixtures/settlement-worker.php'), $action, (string) $admin->id], base_path(),
+                ['DB_DATABASE' => 'pixelforge_test', 'APP_ENV' => 'testing'], json_encode($object), 15);
+        }
+        $this->runContested($workers, fn () => Generation::whereKey($generation->id)->lockForUpdate()->firstOrFail());
+        $this->assertDatabaseCount('final_bills', 1);
+        $this->assertDatabaseCount('wallet_topups', 1);
+        $this->assertSame(['available' => '0.732253125000', 'due' => '0.000000000000', 'held' => '0.200000000000',
+            'spent' => '0.067746875000'], $wallet->balance($user->id));
     }
 
     private function runContested(array $workers, Closure $lock): void

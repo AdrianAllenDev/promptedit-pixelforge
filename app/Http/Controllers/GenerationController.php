@@ -21,10 +21,12 @@ class GenerationController extends Controller
         $rows = DB::table('generations as g')
             ->join('accepted_quotes as q', 'q.generation_id', '=', 'g.id')
             ->leftJoin('final_bills as b', 'b.generation_id', '=', 'g.id')
+            ->leftJoin('wallet_holds as h', 'h.generation_id', '=', 'g.id')
             ->where('g.user_id', $request->user()->id)->orderByDesc('g.created_at')
             ->select('g.id', 'g.status', 'g.message', 'g.image_url', 'g.image_expires_at', 'g.created_at', 'q.minimum', 'q.maximum', 'b.customer_charge')
+            ->selectRaw('(b.generation_id is null and h.generation_id is not null and (h.released_at is not null or g.created_at <= ?)) as hold_released', [Wallet::expiredBeforeOrAt()])
             ->selectRaw("g.payload->>'prompt' as prompt")->simplePaginate(20);
-        $active = Generation::where('user_id', $request->user()->id)->whereNotNull('recover_at')->exists();
+        $active = $rows->getCollection()->contains(fn ($row) => $row->customer_charge === null);
 
         return Inertia::render('Workspace', [
             'history' => $rows, 'active' => $active, 'userId' => $request->user()->id,
