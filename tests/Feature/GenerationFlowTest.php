@@ -46,9 +46,9 @@ class GenerationFlowTest extends TestCase
             'completed_at' => '2026-11-26T00:02:00Z'];
     }
 
-    protected function event(string $eventId, array $object, int $offset = 0, bool $tamper = false): TestResponse
+    protected function event(string $eventId, array $object, int $offset = 0, bool $tamper = false, ?string $type = null): TestResponse
     {
-        $raw = json_encode(['id' => $eventId, 'type' => 'generation.'.$object['status'], 'data' => ['object' => $object]]);
+        $raw = json_encode(['id' => $eventId, 'type' => $type ?? 'generation.'.$object['status'], 'data' => ['object' => $object]]);
         $ts = now()->timestamp + $offset;
         $signature = hash_hmac('sha256', $ts.'.'.$raw, config('services.pixelforge.secret'));
 
@@ -337,6 +337,26 @@ class GenerationFlowTest extends TestCase
         $this->artisan('pixelforge:recover')->assertSuccessful();
         $this->assertDatabaseHas('generations', ['status' => 'queued', 'recover_at' => null, 'submission_uncertain' => true]);
         $this->assertDatabaseEmpty('final_bills');
+    }
+
+    public function test_a_signed_status_mismatch_leaves_one_diagnostic_and_the_wallet_untouched(): void
+    {
+        Http::fake(fn ($r) => str_ends_with($r->url(), '/pricing') ? Http::response($this->pricing)
+            : Http::response($this->object($r['metadata']['local_id'], 'queued'), 202));
+        $g = $this->fundedSubmission();
+        $wallet = app(Wallet::class);
+        $before = $wallet->balance($this->user->id);
+        $object = $this->object($g->id, 'processing');
+        $this->event('evt_conflict', $object, tamper: true, type: 'generation.succeeded')->assertBadRequest();
+        $this->assertDatabaseEmpty('webhook_receipts');
+        for ($i = 0; $i < 2; $i++) {
+            $this->event('evt_conflict', $object, type: 'generation.succeeded')->assertNoContent();
+        }
+        $this->assertDatabaseCount('webhook_receipts', 1);
+        $this->assertDatabaseHas('webhook_receipts', ['event_id' => 'evt_conflict', 'outcome' => 'invalid', 'diagnostic' => 'Generation status conflicts with event type.']);
+        $this->assertSame('queued', $g->refresh()->status);
+        $this->assertDatabaseEmpty('final_bills');
+        $this->assertSame($before, $wallet->balance($this->user->id));
     }
 
     public function test_receipt_rolls_back_with_failed_settlement_and_redelivery_succeeds(): void
