@@ -12,6 +12,10 @@ The initial production check on November 26, 2026 recorded charges of $0.0658812
 
 Sign in at `/admin/login` with the separately supplied admin credentials to open `/admin/report`. The admin area uses its own session guard and account table. Customer registration creates workspace accounts only. To provision an administrator, run `php artisan admin:create` in a trusted terminal and enter the email and password at the prompts. The report reads final bills by UTC completion day and attributes spend to the local user. Each run fetches the deployed key's usage for the inclusive range (up to 92 days). Difference is local cost minus provider cost. An unavailable or incomplete response leaves the comparison unavailable.
 
+### Reviewing unresolved generations
+
+From the admin report, open **Review unresolved generations**. The duty admin owns review as soon as submission becomes uncertain or recovery pauses. Review the oldest cases first, within 24 hours of submission. Compare the local UUID, provider ID, last message and attempt count with the deployed key's deliveries. If the outcome is still unknown, choose **Review hold**, enter the reason and confirm the amount. The wallet records the admin, time and reason. Only funds reserved for that generation are released. The case stays visible until a final bill arrives. After release, recovery may retrieve a known provider ID. It cannot start a new generation for an unconfirmed submission. A signed late event can still settle it.
+
 ## Local setup
 
 1. Create separate PostgreSQL databases named `pixelforge` and `pixelforge_test`. Give the application user access to both.

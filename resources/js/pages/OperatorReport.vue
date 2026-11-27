@@ -16,6 +16,7 @@ const usd = (value: string | null) => value === null ? 'Unavailable' : '$' + val
     <main class="shell report">
         <header><span>Pixelforge administration</span><Link as="button" method="post" href="/admin/logout">Sign out</Link></header>
         <h1>Operator report</h1>
+        <p><Link href="/admin/generations/review">Review unresolved generations</Link></p>
         <form class="report-filter" @submit.prevent="filter.get('/admin/report', { preserveState: true, preserveScroll: true })">
             <label>From (UTC)<input v-model="filter.start" type="date" required /><span role="alert" v-if="filter.errors.start">{{ filter.errors.start }}</span></label>
             <label>Through (UTC)<input v-model="filter.end" type="date" required /><span role="alert" v-if="filter.errors.end">{{ filter.errors.end }}</span></label>
