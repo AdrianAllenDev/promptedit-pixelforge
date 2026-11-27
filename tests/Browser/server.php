@@ -6,12 +6,19 @@ use Carbon\CarbonPeriod;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 if (PHP_SAPI !== 'cli-server' || getenv('APP_ENV') !== 'testing' || getenv('DB_DATABASE') !== 'pixelforge_test') {
     exit(1);
 }
 $public = realpath(__DIR__.'/../../public');
+if (parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) === '/test-fixtures/lighthouse.png') {
+    header('Content-Type: image/png');
+    readfile(__DIR__.'/../Fixtures/night-shift-lighthouse.png');
+
+    return;
+}
 $asset = realpath($public.parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 if ($asset && str_starts_with($asset, $public.DIRECTORY_SEPARATOR) && is_file($asset)) {
     return false;
@@ -38,15 +45,25 @@ Http::fake(function (ClientRequest $request) use ($pricing) {
             return Http::response(['error' => ['code' => 'invalid_api_key']], 401);
         }
         $failed = str_contains($request['prompt'], '[fail]');
+        if ($request['prompt'] === 'Fog rolling across the harbour') {
+            return Http::response(['id' => 'gen_'.$request['metadata']['local_id'], 'metadata' => $request['metadata'], 'status' => 'processing'], 202);
+        }
+        $visibleImage = $request['prompt'] === 'A sunlit lighthouse on the coast';
 
         return Http::response([
             'id' => 'gen_'.$request['metadata']['local_id'], 'metadata' => $request['metadata'],
             'status' => $failed ? 'failed' : 'succeeded', 'completed_at' => now()->toISOString(),
             'rates' => $pricing['rates'], 'usage' => array_combine(Pricing::CATEGORIES, [7, 0, 1100, 201]),
-            'image_url_expires_at' => now()->subMinute()->toISOString(),
+            'image_url' => $visibleImage ? '/test-fixtures/lighthouse.png' : null,
+            'image_url_expires_at' => ($visibleImage ? now()->addDay() : now()->subMinute())->toISOString(),
             'error' => $failed ? ['message' => 'Generation failed. You were not charged.'] : null,
         ], 202);
     }
     throw new RuntimeException('Unexpected browser-test provider request.');
 });
-$app->handleRequest(Request::capture());
+$request = Request::capture();
+// Give the visual fixture a stable timeline order even on a fast CI runner.
+if ($request->is('generations') && $request->input('prompt') === 'A sunlit lighthouse on the coast') {
+    Carbon::setTestNow(now()->subMinutes(2));
+}
+$app->handleRequest($request);

@@ -26,7 +26,7 @@ const props = defineProps<{
 }>();
 const storageKey = 'pixelforge.submission.' + props.userId;
 const empty: Input = { prompt: '', size: '1024x1024', quality: 'medium', reference_images: [] };
-function restore(): { input: Input; key: string } | null {
+function restore(): { input: Input; key: string; unconfirmed?: boolean } | null {
     try {
         return JSON.parse(sessionStorage.getItem(storageKey) || 'null');
     } catch {
@@ -37,9 +37,17 @@ const saved = restore();
 const input = reactive<Input>(saved?.input ?? empty);
 const key = ref(saved?.key ?? crypto.randomUUID());
 const payload = computed(() => ({ ...input, reference_images: input.reference_images.map((url) => url.trim()).filter(Boolean) }));
+const fingerprint = computed(() => JSON.stringify(payload.value));
+const lastAccepted = ref<string | null>(null);
+const unconfirmed = ref(saved?.unconfirmed ?? Boolean(saved));
 const quote = ref<Quote | null>(null);
 const showWallet = computed(() => quote.value?.wallet_enabled ?? props.walletsEnabled);
 const busy = ref(false);
+const actionLabel = computed(() => {
+    if (busy.value) return 'Submitting…';
+    if (unconfirmed.value) return 'Retry submission';
+    return lastAccepted.value === fingerprint.value ? 'Generate again' : 'Generate';
+});
 const loading = ref(false);
 const message = ref('');
 const invalid = ref<Record<string, string[]>>({});
@@ -59,13 +67,18 @@ function updateError(error: unknown, fallback: string) {
     } else message.value = fallback;
 }
 watch(
-    [() => JSON.stringify(payload.value), retry],
-    ([fingerprint], [previous] = ['', 0], onCleanup) => {
+    [fingerprint, retry],
+    ([current], [previous] = ['', 0], onCleanup) => {
         quote.value = null;
         message.value = '';
         invalid.value = {};
         loading.value = false;
-        if (previous && previous !== fingerprint) key.value = crypto.randomUUID();
+        if (previous && previous !== current) {
+            key.value = crypto.randomUUID();
+            lastAccepted.value = null;
+            unconfirmed.value = false;
+            sessionStorage.removeItem(storageKey);
+        }
         if (!input.prompt.trim()) return;
         loading.value = true;
         const controller = new AbortController();
@@ -94,10 +107,14 @@ async function generate() {
     try {
         sessionStorage.setItem(storageKey, JSON.stringify({ input: payload.value, key: key.value }));
         await axios.post('/generations', { ...payload.value, submission_key: key.value, quote_token: quote.value.quote_token });
+        lastAccepted.value = fingerprint.value;
+        unconfirmed.value = false;
         sessionStorage.removeItem(storageKey);
         key.value = crypto.randomUUID();
         router.visit('/dashboard', { preserveState: true, preserveScroll: true });
     } catch (e) {
+        unconfirmed.value = axios.isAxiosError(e) && (!e.response || e.response.status >= 500);
+        if (!unconfirmed.value) sessionStorage.setItem(storageKey, JSON.stringify({ input: payload.value, key: key.value, unconfirmed: false }));
         updateError(e, 'Could not confirm the submission. Retry to check the same request.');
         if (axios.isAxiosError(e) && e.response?.data?.quote) quote.value = e.response.data.quote;
     } finally {
@@ -121,7 +138,7 @@ onBeforeUnmount(() => clearInterval(timer));
 </script>
 <template>
     <Head title="New generation" />
-    <main class="shell">
+    <main class="shell workspace">
         <header>
             <span>Pixelforge</span>
             <nav v-if="showWallet" aria-label="Workspace navigation" class="workspace-nav">
@@ -183,7 +200,7 @@ onBeforeUnmount(() => clearInterval(timer));
                                 <span class="muted">Estimate</span>
                                 <div class="amount">{{ quote ? money(quote.min) + '–' + money(quote.max) : loading ? 'Calculating…' : '—' }}</div>
                             </div>
-                            <button class="primary" :disabled="!quote || busy">{{ busy ? 'Submitting…' : 'Generate' }}</button>
+                            <button class="primary" :disabled="!quote || busy">{{ actionLabel }}</button>
                         </div>
                         <p v-if="showWallet" class="muted wallet-hint">The hold is the upper estimate at current rates. Your final charge uses the rates Pixelforge applies when it accepts your request.</p>
                         <p v-if="message" role="alert">

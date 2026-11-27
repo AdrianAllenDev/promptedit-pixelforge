@@ -198,6 +198,19 @@ dt {
 nav a {
     margin-right: 1rem;
 }
+@media (max-width: 600px) {
+    .workspace header { min-height: 3rem; }
+    .studio h1 { font-size: 1.75rem; margin: 1.15rem 0 .9rem; }
+    .prompt-field { margin-bottom: .75rem; }
+    .prompt-field textarea { height: 3.25rem; min-height: 3.25rem; }
+    .settings-row, .references summary { min-height: 2.75rem; }
+    .quote-action { margin: .75rem 0; }
+    .quote-action .amount { font-size: .9rem; }
+    .activity h2 { font-size: 1.4rem; margin: 1rem 0 .75rem; }
+    .activity li { padding-bottom: .65rem; }
+    .activity dl { margin-top: .25rem; }
+    .activity img { width: min(100%, 10.5rem); margin: .35rem 0; }
+}
 @media (min-width: 800px) {
     .studio {
         display: grid;
