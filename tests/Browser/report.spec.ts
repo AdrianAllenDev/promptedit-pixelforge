@@ -12,6 +12,9 @@ test('operator can run a date filter and read amounts at four widths', async ({ 
     await page.getByLabel('Confirm password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page.getByRole('heading', { name: 'New generation' })).toBeVisible();
+    await page.getByLabel('Prompt', { exact: true }).fill('Example for the daily report');
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.getByText('Image link expired.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Operator report' })).toHaveCount(0);
     expect((await page.request.get('/admin/report')).status()).toBe(403);
     expect((await page.request.get('/operator/report')).status()).toBe(403);
@@ -27,10 +30,14 @@ test('operator can run a date filter and read amounts at four widths', async ({ 
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(/\/admin\/report$/);
 
-    await page.getByLabel('From (UTC)').fill('2026-11-26');
-    await page.getByLabel('Through (UTC)').fill('2026-11-26');
+    const day = new Date().toISOString().slice(0, 10);
+    await page.getByLabel('From (UTC)').fill(day);
+    await page.getByLabel('Through (UTC)').fill(day);
     await page.getByRole('button', { name: 'Run report' }).press('Enter');
-    await expect(page.getByText('2026-11-26', { exact: true })).toBeVisible();
+    const breakdown = page.locator('details').filter({ hasText: 'User breakdown for ' + day });
+    await breakdown.locator('summary').press('Enter');
+    await expect(breakdown.getByText(/Report reviewer/).first()).toBeVisible();
+    await expect(breakdown.getByText('$0.058184375', { exact: true }).first()).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     for (const width of [360, 390, 768, 1440]) {
         await page.setViewportSize({ width, height: 844 });
